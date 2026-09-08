@@ -8,7 +8,9 @@
      期限つきに管理しています。
    ========================================================================= */
 
-const CACHE = 'odekake-tenki-v1';
+// ファイルを差し替えたときは、この番号を1つ増やしてください。
+// 古いキャッシュを確実に捨てて、新しいファイルを読み込ませるためのしるしです。
+const CACHE = 'odekake-tenki-v3';
 
 const SHELL = [
   './',
@@ -22,11 +24,12 @@ const SHELL = [
   './advice.js',
   './sky.js',
   './chart.js',
+  './radar.js',
   './app.js',
   './manifest.json',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/icon-maskable-512.png'
+  './icon-192.png',
+  './icon-512.png',
+  './icon-maskable-512.png'
 ];
 
 self.addEventListener('install', (event) => {

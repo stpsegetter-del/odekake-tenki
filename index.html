@@ -12,8 +12,8 @@
 <meta name="apple-mobile-web-app-title" content="おでかけ天気">
 <meta name="format-detection" content="telephone=no">
 <link rel="manifest" href="./manifest.json">
-<link rel="apple-touch-icon" href="./icons/icon-192.png">
-<link rel="icon" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="icon" href="./icon-192.png">
 <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
@@ -107,6 +107,43 @@
       </article>
     </section>
 
+    <!-- 雨雲レーダー -->
+    <section class="card" id="radarCard" aria-label="雨雲レーダー" hidden>
+      <div class="card__head">
+        <h2 class="card__title">雨雲レーダー</h2>
+        <span class="card__badge" id="radarTime"></span>
+      </div>
+
+      <div class="radar" id="radarMap">
+        <div class="radar__layer radar__layer--base" id="radarBase"></div>
+        <div class="radar__layer radar__layer--rain" id="radarFrames"></div>
+        <div class="radar__pin" aria-hidden="true"></div>
+        <div class="radar__zoom">
+          <button class="radar__zoom-btn" id="radarZoomIn" type="button" aria-label="拡大する">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
+          </button>
+          <button class="radar__zoom-btn" id="radarZoomOut" type="button" aria-label="縮小する">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
+          </button>
+        </div>
+      </div>
+      <p class="radar__note" id="radarNote" hidden></p>
+
+      <div class="radar__controls">
+        <button class="radar__play" id="radarPlay" type="button" aria-label="再生">
+          <svg class="radar__play-icon radar__play-icon--play" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8 5.5v13l11-6.5Z" fill="currentColor"/></svg>
+          <svg class="radar__play-icon radar__play-icon--pause" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8 5h3v14H8zm5 0h3v14h-3z" fill="currentColor"/></svg>
+        </button>
+        <input class="radar__slider" id="radarSlider" type="range" min="0" max="0" value="0" step="1" aria-label="時刻を選ぶ">
+      </div>
+
+      <div class="radar__legend" id="radarLegend"></div>
+      <p class="chart-hint">
+        中心の印があなたの場所です。▶を押すと、過去30分から この先60分までの雨雲の動きが見られます。<br>
+        雨雲：気象庁 高解像度降水ナウキャスト／地図：国土地理院
+      </p>
+    </section>
+
     <!-- 明日の時間別 -->
     <section class="card" aria-label="明日の時間別予報">
       <div class="card__head">
@@ -153,7 +190,7 @@
 </div>
 
 <!-- ================= 地点追加画面 ================= -->
-<div class="screen" id="addPlaceScreen" hidden>
+<div class="screen screen--add" id="addPlaceScreen" hidden>
   <div class="screen__head">
     <button class="icon-btn" id="btnCloseAdd" type="button" aria-label="閉じる">
       <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>
@@ -205,7 +242,7 @@
 </div>
 
 <!-- ================= 設定画面 ================= -->
-<div class="screen" id="settingsScreen" hidden>
+<div class="screen screen--settings" id="settingsScreen" hidden>
   <div class="screen__head">
     <button class="icon-btn" id="btnCloseSettings" type="button" aria-label="閉じる">
       <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>
@@ -320,6 +357,7 @@
 <script src="./advice.js"></script>
 <script src="./sky.js"></script>
 <script src="./chart.js"></script>
+<script src="./radar.js"></script>
 <script src="./app.js"></script>
 </body>
 </html>

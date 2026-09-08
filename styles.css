@@ -103,6 +103,25 @@
   --ch-text-strong: #e4ecf4;
 }
 
+/* ---------------------------------------------------------------
+   天気アイコンの雲の色。
+   空の上（ヘッダー付近）では白い雲でよいが、白いカードの上に同じ白を
+   置くと雲が消えて「雨の線だけ」に見えてしまう。カードの中だけ濃くする。
+   --------------------------------------------------------------- */
+.card, .advice-card, .hour-sheet, .sheet, .screen, .daily {
+  --ic-cloud: #c3d6e6;
+  --ic-cloud-shade: #a3bcd2;
+}
+[data-theme="dark"] .card,
+[data-theme="dark"] .advice-card,
+[data-theme="dark"] .hour-sheet,
+[data-theme="dark"] .sheet,
+[data-theme="dark"] .screen,
+[data-theme="dark"] .daily {
+  --ic-cloud: #dfe9f3;
+  --ic-cloud-shade: #aebfd0;
+}
+
 /* 空が暗いときは、空の上の文字を白に */
 [data-on-sky="light"] {
   --on-sky: #ffffff;
@@ -548,6 +567,186 @@ body.is-updating .header__gear::after {
   margin-top: 3px;
 }
 
+/* ---------------- 雨雲レーダー ---------------- */
+.radar {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: 300px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-2);
+  /* 地図の上で指を動かしてもページのスクロールを邪魔しないようにする */
+  touch-action: pan-y;
+}
+
+@supports not (aspect-ratio: 1) {
+  .radar { height: 250px; }
+}
+
+.radar__layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.radar__layer--base { z-index: 1; }
+.radar__layer--rain { z-index: 2; opacity: .82; }
+
+/* ダークテーマでは地図だけを反転させて暗い地図にする（雨雲の色はそのまま） */
+[data-theme="dark"] .radar__layer--base {
+  filter: invert(1) hue-rotate(180deg) brightness(.86) contrast(.92);
+}
+
+.radar__frame { position: absolute; inset: 0; }
+
+.radar__tile {
+  position: absolute;
+  width: 256px;
+  height: 256px;
+  image-rendering: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* 中心（登録した場所）の印 */
+.radar__pin {
+  position: absolute;
+  left: 50%; top: 50%;
+  z-index: 3;
+  width: 16px; height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: #e0453a;
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .4);
+  pointer-events: none;
+}
+.radar__pin::after {
+  content: "";
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 46px; height: 46px;
+  margin: -23px 0 0 -23px;
+  border-radius: 50%;
+  border: 2px solid rgba(224, 69, 58, .55);
+}
+
+.radar__zoom {
+  position: absolute;
+  right: 8px; bottom: 8px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .28);
+}
+.radar__zoom-btn {
+  width: 40px; height: 40px;
+  border: 0;
+  background: rgba(255, 255, 255, .94);
+  color: #1d2a38;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.radar__zoom-btn:active { background: #e7eef5; }
+.radar__zoom-btn[disabled] { opacity: .4; pointer-events: none; }
+
+[data-theme="dark"] .radar__zoom-btn { background: rgba(24, 32, 43, .94); color: #e9eff6; }
+[data-theme="dark"] .radar__zoom-btn:active { background: #2a3644; }
+
+/* 予想のコマであることを枠で伝える */
+.radar[data-forecast="1"]::after {
+  content: "予想";
+  position: absolute;
+  left: 8px; top: 8px;
+  z-index: 4;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(43, 127, 208, .92);
+  color: #fff;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.radar__note {
+  margin: 12px 4px 0;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-sub);
+  font-size: .86rem;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.radar__controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px 4px;
+}
+
+.radar__play {
+  flex: 0 0 auto;
+  width: 46px; height: 46px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .12s ease;
+}
+.radar__play:active { transform: scale(.93); }
+.radar__play-icon--pause { display: none; }
+.radar__play.is-playing .radar__play-icon--play { display: none; }
+.radar__play.is-playing .radar__play-icon--pause { display: inline; }
+
+.radar__slider {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 34px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.radar__legend {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 4px 0;
+  flex-wrap: wrap;
+}
+.radar__legend-cap {
+  font-size: .72rem;
+  color: var(--text-weak);
+  padding: 0 4px 3px;
+}
+.radar__legend-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.radar__legend-item i {
+  display: block;
+  width: 26px; height: 10px;
+  border-radius: 2px;
+}
+.radar__legend-item em {
+  font-style: normal;
+  font-size: .64rem;
+  color: var(--text-weak);
+}
+
 /* ---------------- 5日間予報 ---------------- */
 .daily { padding: 0 2px; }
 
@@ -650,6 +849,12 @@ body.is-updating .header__gear::after {
 .btn--lg { min-height: 54px; font-size: 1.02rem; width: 100%; }
 
 /* ---------------- 画面（オーバーレイ） ---------------- */
+/* ---------------------------------------------------------------
+   画面の重ね順（下から順に積み上げる）
+   50 オンボーディング < 60 設定 < 70 場所の追加 < 80 名前をつける
+   < 85 時刻の詳細 < 100 お知らせ
+   ここを同じ値にすると、あとから開いた画面が下に隠れてしまいます。
+   --------------------------------------------------------------- */
 .screen {
   position: fixed;
   inset: 0;
@@ -660,6 +865,10 @@ body.is-updating .header__gear::after {
   animation: slide-up .24s ease;
   overflow: hidden;
 }
+.screen--onboarding { z-index: 50; }
+.screen--settings { z-index: 60; }
+.screen--add { z-index: 70; }
+.screen--sheet { z-index: 80; }
 @keyframes slide-up {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: none; }
@@ -1032,7 +1241,7 @@ body.is-updating .header__gear::after {
 .sheet-overlay {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: 85;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -1093,7 +1302,7 @@ body.is-updating .header__gear::after {
   left: 50%;
   bottom: max(24px, env(safe-area-inset-bottom));
   transform: translate(-50%, 16px);
-  z-index: 90;
+  z-index: 100;
   max-width: min(420px, calc(100vw - 32px));
   padding: 12px 18px;
   border-radius: 12px;

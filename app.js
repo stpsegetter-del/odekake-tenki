@@ -31,6 +31,7 @@
     watchSystemTheme();
     buildTimeSelects();
     bindEvents();
+    if (window.Radar) Radar.init();
     registerServiceWorker();
 
     if (places.length === 0) {
@@ -155,6 +156,7 @@
     settings = Store.saveSettings({ activePlaceId: id });
     renderTabs();
     loadWeather();
+    if (window.Radar) Radar.setPlace(place);
   }
 
   /* =====================================================================
@@ -191,7 +193,10 @@
         currentData = res.data;
         currentMeta = res;
         renderAll();
-        if (o.force) toast('最新の予報にしました');
+        if (o.force) {
+          if (window.Radar) Radar.refresh();
+          toast('最新の予報にしました');
+        }
       })
       .catch((err) => {
         if (token !== loadToken) return;
@@ -691,8 +696,12 @@
     const place = Store.addPlace(Object.assign({ name }, pendingPlace));
     pendingPlace = null;
     places = Store.getPlaces();
+
+    // 追加が終わったら、開いていた画面をすべて閉じて
+    // 「追加した場所の天気」を見せる。ここで設定画面に戻されると迷うため。
     $('namePlaceScreen').hidden = true;
     closeAddPlace();
+    closeSettings();
 
     if ($('onboarding').hidden === false) {
       $('onboarding').hidden = true;
