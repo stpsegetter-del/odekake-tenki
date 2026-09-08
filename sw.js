@@ -10,7 +10,7 @@
 
 // ファイルを差し替えたときは、この番号を1つ増やしてください。
 // 古いキャッシュを確実に捨てて、新しいファイルを読み込ませるためのしるしです。
-const CACHE = 'odekake-tenki-v3';
+const CACHE = 'odekake-tenki-v4';
 
 const SHELL = [
   './',

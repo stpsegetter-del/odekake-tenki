@@ -2,11 +2,14 @@
    radar.js  —  雨雲レーダー
    ---------------------------------------------------------------------
    ・雨雲：気象庁「高解像度降水ナウキャスト」（無料・APIキー不要）
+     5分きざみで、実況は過去3時間ぶん、予測は60分先まで。
+     ※60分より先の雨雲は気象庁から配信されていません。レーダーの雨雲を
+       追いかける予測は、原理的に1時間先あたりが限界のためです。
+       それより先は、画面上の「これから12時間」のグラフをご覧ください。
    ・地図：国土地理院の淡色地図タイル（無料・APIキー不要）
    ・地図ライブラリは使わず、タイルを自前で並べています（軽さのため）。
    ・登録した場所を中心に固定しています。指でドラッグして動かす作りに
      すると、ページを縦にスクロールできなくなって使いにくいためです。
-     見る範囲は ＋ − ボタンで変えられます。
    ========================================================================= */
 (function (global) {
   'use strict';
@@ -19,9 +22,16 @@
   const JMA_TILE = 'https://www.jma.go.jp/bosai/jmatile/data/nowc/' +
                    '{basetime}/none/{validtime}/surf/hrpns/{z}/{x}/{y}.png';
 
-  const ZOOM_MIN = 7;
+  /* 気象庁が実データを持つズームは偶数だけ（奇数は中身が空のPNGが返る）。
+     地図側は全ズームあるので、雨雲だけ1段下のタイルを拡大して重ねる。 */
+  const RAIN_ZOOMS = [4, 6, 8, 10];
+
+  const ZOOM_MIN = 6;
   const ZOOM_MAX = 12;
-  const FRAME_MS = 480;
+  const ZOOM_DEFAULT = 10;
+
+  const FRAME_MS = 380;
+  const PLAY_BACK_STEPS = 6;         // 再生は「30分前」から始める（5分×6）
   const TIMES_TTL = 4 * 60 * 1000;   // 時刻一覧の取り直しは4分に1回まで
 
   // 気象庁ナウキャストの色（1時間あたりの雨量 mm）
@@ -37,16 +47,15 @@
 
   /* ---------------- 状態 ---------------- */
   const S = {
-    el: {},            // DOM
+    el: {},
     place: null,
-    zoom: 10,
-    frames: [],        // [{basetime, validtime, date, forecast}]
-    nowIndex: 0,       // 「いま」のコマ
-    index: 0,          // 表示中のコマ
+    zoom: ZOOM_DEFAULT,
+    frames: [],
+    nowIndex: 0,
+    index: 0,
     playing: false,
     timer: 0,
     timesFetchedAt: 0,
-    built: false,
     ready: false
   };
 
@@ -58,14 +67,18 @@
     return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z);
   }
 
-  /** 日本国内かどうか（気象庁のレーダーは日本のみ） */
+  /** 表示ズームに対して、雨雲タイルを取りに行くズーム */
+  function rainZoomFor(z) {
+    let best = RAIN_ZOOMS[0];
+    for (const s of RAIN_ZOOMS) if (s <= z) best = s;
+    return best;
+  }
+
   function inJapan(lat, lon) {
     return lat >= 20 && lat <= 46.5 && lon >= 122 && lon <= 154;
   }
 
   /* ---------------- 時刻 ---------------- */
-
-  /** "20260908110500"（UTC）→ Date */
   function parseJmaTime(s) {
     const t = String(s);
     return new Date(Date.UTC(
@@ -77,6 +90,16 @@
     return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
   }
 
+  /** -95 → 「1時間35分前」 / 0 → 「いま」 / 30 → 「30分後」 */
+  function relLabel(min) {
+    if (min === 0) return 'いま';
+    const a = Math.abs(min);
+    const body = a >= 60
+      ? `${Math.floor(a / 60)}時間${a % 60 ? (a % 60) + '分' : ''}`
+      : `${a}分`;
+    return body + (min < 0 ? '前' : '後');
+  }
+
   function fetchJson(url) {
     return fetch(url, { mode: 'cors', cache: 'no-store' })
       .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
@@ -84,37 +107,26 @@
 
   /**
    * 表示するコマを組み立てる。
-   * 過去30分（10分おき）＋いま＋この先60分（10分おき）＝ 全10コマ。
-   * 5分おきにすると通信量が倍になるので、10分おきにしています。
+   * 気象庁が配信している 5分きざみのコマを、そのまま全部使う。
+   * （実況＝過去3時間ぶん / 予測＝60分先まで）
    */
   function loadFrames() {
-    const fresh = Date.now() - S.timesFetchedAt < TIMES_TTL;
-    if (fresh && S.frames.length) return Promise.resolve(S.frames);
-
+    if (S.frames.length && Date.now() - S.timesFetchedAt < TIMES_TTL) {
+      return Promise.resolve(S.frames);
+    }
     return Promise.all([
       fetchJson(JMA_OBS).catch(() => []),
       fetchJson(JMA_FC).catch(() => [])
     ]).then(([obs, fc]) => {
-      const past = [];
-      // obs は新しい順。10分おき（=2件おき）に、いまを含めて4コマ取る。
-      for (let i = 6; i >= 0; i -= 2) {
-        if (obs[i]) past.push(makeFrame(obs[i], false));
-      }
-      // 予測は古い順に並べ直し、「いま」より後のものだけを10分おきに拾う。
-      // 気象庁の実況と予測は基準時刻がずれることがあるので、
-      // 添字ではなく実際の時刻で切り分けている。
+      // どちらも「新しい順」で来るので、古い順に並べ直す
+      const past = obs.slice().reverse().map((r) => makeFrame(r, false));
       const nowT = past.length ? past[past.length - 1].date.getTime() : Date.now();
-      const cand = fc.slice().reverse()
-        .map((row) => makeFrame(row, true))
-        .filter((f) => f.date.getTime() > nowT + 60 * 1000);
+      const future = fc.slice().reverse()
+        .map((r) => makeFrame(r, true))
+        .filter((f) => f.date.getTime() > nowT);
 
-      const future = [];
-      for (let i = 1; i < cand.length && future.length < 6; i += 2) {
-        future.push(cand[i]);
-      }
       S.frames = past.concat(future);
       S.nowIndex = Math.max(0, past.length - 1);
-      S.index = S.nowIndex;
       S.timesFetchedAt = Date.now();
       return S.frames;
     });
@@ -131,12 +143,19 @@
 
   /* ---------------- タイルを並べる ---------------- */
 
-  function tileHtml(template, ctx, extra) {
-    const n = Math.pow(2, ctx.z);
-    const originX = ctx.fx * TILE - ctx.w / 2;
-    const originY = ctx.fy * TILE - ctx.h / 2;
-    const x0 = Math.floor(originX / TILE), x1 = Math.floor((originX + ctx.w) / TILE);
-    const y0 = Math.floor(originY / TILE), y1 = Math.floor((originY + ctx.h) / TILE);
+  /**
+   * @param {string} template  {z}{x}{y}（と {basetime}{validtime}）を含むURL
+   * @param {object} o  {z:表示ズーム, sz:取得ズーム, w, h, lat, lon, extra, cls}
+   */
+  function tileHtml(template, o) {
+    const scale = Math.pow(2, o.z - o.sz);   // 1より大きいと拡大表示
+    const ts = TILE * scale;                  // 画面上でのタイル1枚の大きさ
+    const n = Math.pow(2, o.sz);
+
+    const originX = lonToTileX(o.lon, o.sz) * ts - o.w / 2;
+    const originY = latToTileY(o.lat, o.sz) * ts - o.h / 2;
+    const x0 = Math.floor(originX / ts), x1 = Math.floor((originX + o.w) / ts);
+    const y0 = Math.floor(originY / ts), y1 = Math.floor((originY + o.h) / ts);
 
     let html = '';
     for (let ty = y0; ty <= y1; ty++) {
@@ -144,48 +163,57 @@
       for (let tx = x0; tx <= x1; tx++) {
         const wx = ((tx % n) + n) % n;
         const url = template
-          .replace('{z}', ctx.z).replace('{x}', wx).replace('{y}', ty)
-          .replace('{basetime}', extra ? extra.basetime : '')
-          .replace('{validtime}', extra ? extra.validtime : '');
-        const left = Math.round(tx * TILE - originX);
-        const top = Math.round(ty * TILE - originY);
-        html += `<img class="radar__tile" src="${url}" alt="" decoding="async" ` +
-                `style="left:${left}px;top:${top}px">`;
+          .replace('{z}', o.sz).replace('{x}', wx).replace('{y}', ty)
+          .replace('{basetime}', o.extra ? o.extra.basetime : '')
+          .replace('{validtime}', o.extra ? o.extra.validtime : '');
+        const left = Math.round(tx * ts - originX);
+        const top = Math.round(ty * ts - originY);
+        html += `<img class="radar__tile${o.cls ? ' ' + o.cls : ''}" src="${url}" alt="" ` +
+                `decoding="async" style="left:${left}px;top:${top}px;` +
+                `width:${ts}px;height:${ts}px">`;
       }
     }
     return html;
   }
 
-  function viewContext() {
+  function viewSize() {
     const box = S.el.map.getBoundingClientRect();
     return {
-      z: S.zoom,
       w: Math.max(1, Math.round(box.width)),
-      h: Math.max(1, Math.round(box.height)),
-      fx: lonToTileX(S.place.lon, S.zoom),
-      fy: latToTileY(S.place.lat, S.zoom)
+      h: Math.max(1, Math.round(box.height))
     };
   }
 
-  /** 地図と、雨雲のコマを組み立て直す */
-  function build() {
-    if (!S.place) return;
-    const ctx = viewContext();
+  function baseCtx() {
+    const v = viewSize();
+    return { z: S.zoom, sz: S.zoom, w: v.w, h: v.h, lat: S.place.lat, lon: S.place.lon };
+  }
 
-    S.el.base.innerHTML = tileHtml(GSI_TILE, ctx, null);
+  function rainCtx(frame) {
+    const v = viewSize();
+    const sz = rainZoomFor(S.zoom);
+    return {
+      z: S.zoom, sz, w: v.w, h: v.h, lat: S.place.lat, lon: S.place.lon,
+      extra: frame,
+      cls: sz < S.zoom ? 'radar__tile--zoomed' : ''
+    };
+  }
+
+  /** 地図と、雨雲のコマの入れ物を組み立て直す */
+  function build() {
+    if (!S.place || !S.frames.length) return;
+
+    S.el.base.innerHTML = tileHtml(GSI_TILE, baseCtx());
 
     let html = '';
     for (let i = 0; i < S.frames.length; i++) {
       html += `<div class="radar__frame" data-i="${i}"${i === S.index ? '' : ' hidden'}></div>`;
     }
     S.el.frames.innerHTML = html;
-    S.built = true;
 
     ensureFrame(S.index);
     updateTimeLabel();
-
-    // 表示中のコマを見せたあと、残りを順に先読みしておく
-    setTimeout(prefetchRest, 800);
+    setTimeout(prefetchPlayRange, 600);
   }
 
   function ensureFrame(i) {
@@ -193,21 +221,23 @@
     if (!el || el.dataset.loaded === '1') return;
     const f = S.frames[i];
     if (!f) return;
-    el.innerHTML = tileHtml(JMA_TILE, viewContext(), f);
+    el.innerHTML = tileHtml(JMA_TILE, rainCtx(f));
     el.dataset.loaded = '1';
   }
 
+  /** 再生でよく使う範囲だけ、少しずつ先読みしておく */
   let prefetchTimer = 0;
-  function prefetchRest() {
+  function prefetchPlayRange() {
     clearTimeout(prefetchTimer);
-    let i = 0;
+    const r = playRange();
+    let i = r.from;
     const step = () => {
-      while (i < S.frames.length && S.el.frames.children[i] &&
+      while (i <= r.to && S.el.frames.children[i] &&
              S.el.frames.children[i].dataset.loaded === '1') i++;
-      if (i >= S.frames.length) return;
+      if (i > r.to) return;
       ensureFrame(i);
       i++;
-      prefetchTimer = setTimeout(step, 120);
+      prefetchTimer = setTimeout(step, 130);
     };
     step();
   }
@@ -227,20 +257,33 @@
     if (!f) { S.el.time.textContent = ''; return; }
     const base = S.frames[S.nowIndex];
     const diff = base ? Math.round((f.date - base.date) / 60000) : 0;
-    const tag = diff === 0 ? 'いま' : (diff < 0 ? `${-diff}分前` : `${diff}分後`);
-    S.el.time.textContent = `${hhmm(f.date)}　${tag}`;
+    S.el.time.textContent = `${hhmm(f.date)}　${relLabel(diff)}`;
     S.el.map.setAttribute('data-forecast', f.forecast ? '1' : '0');
   }
 
   /* ---------------- 再生 ---------------- */
+
+  /** 再生する範囲：30分前 〜 いちばん先の予測 */
+  function playRange() {
+    return {
+      from: Math.max(0, S.nowIndex - PLAY_BACK_STEPS),
+      to: S.frames.length - 1
+    };
+  }
+
   function play() {
     if (S.playing || S.frames.length < 2) return;
     S.playing = true;
     S.el.play.setAttribute('aria-label', '一時停止');
     S.el.play.classList.add('is-playing');
+    // 「いま」の位置で押されたときは30分前まで巻き戻す。
+    // そこから流したほうが、雨雲がどちらへ動いているか分かるため。
+    const r = playRange();
+    if (S.index < r.from || S.index >= r.to || S.index === S.nowIndex) showFrame(r.from);
     S.timer = setInterval(() => {
+      const rr = playRange();
       let next = S.index + 1;
-      if (next >= S.frames.length) next = 0;
+      if (next > rr.to || S.index < rr.from) next = rr.from;
       showFrame(next);
     }, FRAME_MS);
   }
@@ -263,15 +306,25 @@
     S.el.note.hidden = !text;
   }
 
+  function rebuildTiles() {
+    for (const k of S.el.frames.children) k.dataset.loaded = '';
+    build();
+  }
+
   function setZoom(z) {
     const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
     if (next === S.zoom) return;
     S.zoom = next;
+    syncZoomButtons();
+    rebuildTiles();
+  }
+
+  function syncZoomButtons() {
     S.el.zoomIn.disabled = S.zoom >= ZOOM_MAX;
     S.el.zoomOut.disabled = S.zoom <= ZOOM_MIN;
-    // コマを作り直す（ズームが変わるとタイルが全部変わるため）
-    for (const k of S.el.frames.children) k.dataset.loaded = '';
-    build();
+    // 雨雲を拡大表示している間は、粗さの理由がわかるようにしておく
+    const sz = rainZoomFor(S.zoom);
+    S.el.map.setAttribute('data-zoomed', sz < S.zoom ? '1' : '0');
   }
 
   /* ---------------- 外に出す関数 ---------------- */
@@ -288,7 +341,8 @@
       slider: document.getElementById('radarSlider'),
       zoomIn: document.getElementById('radarZoomIn'),
       zoomOut: document.getElementById('radarZoomOut'),
-      legend: document.getElementById('radarLegend')
+      legend: document.getElementById('radarLegend'),
+      now: document.getElementById('radarNow')
     };
     if (!S.el.card) return;
 
@@ -302,25 +356,19 @@
     S.el.zoomIn.addEventListener('click', () => setZoom(S.zoom + 1));
     S.el.zoomOut.addEventListener('click', () => setZoom(S.zoom - 1));
     S.el.slider.addEventListener('input', () => { pause(); showFrame(Number(S.el.slider.value)); });
+    if (S.el.now) S.el.now.addEventListener('click', () => { pause(); showFrame(S.nowIndex); });
 
     document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 
     let rt = 0;
     global.addEventListener('resize', () => {
       clearTimeout(rt);
-      rt = setTimeout(() => {
-        if (!S.ready || !S.built) return;
-        for (const k of S.el.frames.children) k.dataset.loaded = '';
-        build();
-      }, 250);
+      rt = setTimeout(() => { if (S.ready && S.frames.length) rebuildTiles(); }, 250);
     }, { passive: true });
 
     S.ready = true;
   }
 
-  /**
-   * 表示する場所を決める。地点を切り替えたときに呼びます。
-   */
   function setPlace(place) {
     if (!S.ready || !place) return;
     pause();
@@ -344,14 +392,11 @@
     loadFrames()
       .then((frames) => {
         if (!frames.length) throw new Error('no frames');
-        // 場所を切り替えたときは、必ず「いま」から見せる
-        S.index = S.nowIndex;
+        S.index = S.nowIndex;            // 場所を変えたら必ず「いま」から
         S.el.slider.max = String(frames.length - 1);
         S.el.slider.value = String(S.index);
-        S.el.zoomIn.disabled = S.zoom >= ZOOM_MAX;
-        S.el.zoomOut.disabled = S.zoom <= ZOOM_MIN;
-        for (const k of S.el.frames.children) k.dataset.loaded = '';
-        build();
+        syncZoomButtons();
+        rebuildTiles();
         S.el.card.setAttribute('data-state', 'ok');
       })
       .catch(() => {
@@ -361,7 +406,6 @@
       });
   }
 
-  /** 予報を更新したときに、レーダーも新しくする */
   function refresh() {
     if (!S.ready || !S.place) return;
     S.timesFetchedAt = 0;

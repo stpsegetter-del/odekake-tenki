@@ -599,13 +599,28 @@ body.is-updating .header__gear::after {
 
 .radar__frame { position: absolute; inset: 0; }
 
+/* 大きさは JS が1枚ずつ指定します（雨雲を拡大して重ねることがあるため） */
 .radar__tile {
   position: absolute;
-  width: 256px;
-  height: 256px;
-  image-rendering: auto;
   user-select: none;
   -webkit-user-drag: none;
+}
+
+/* 気象庁の雨雲タイルは偶数ズームにしかないので、奇数ズームでは1段下の
+   タイルを引き伸ばして使う。ぼかさず、雨量メッシュの粒をそのまま見せる。 */
+.radar__tile--zoomed { image-rendering: pixelated; }
+
+.radar[data-zoomed="1"]::before {
+  content: "拡大表示";
+  position: absolute;
+  left: 8px; bottom: 8px;
+  z-index: 4;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(20, 32, 46, .72);
+  color: #fff;
+  font-size: .68rem;
+  letter-spacing: .04em;
 }
 
 /* 中心（登録した場所）の印 */
@@ -716,6 +731,20 @@ body.is-updating .header__gear::after {
   accent-color: var(--accent);
   cursor: pointer;
 }
+
+.radar__now {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-sub);
+  font-size: .84rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.radar__now:active { transform: scale(.95); }
 
 .radar__legend {
   display: flex;

@@ -135,11 +135,13 @@
           <svg class="radar__play-icon radar__play-icon--pause" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8 5h3v14H8zm5 0h3v14h-3z" fill="currentColor"/></svg>
         </button>
         <input class="radar__slider" id="radarSlider" type="range" min="0" max="0" value="0" step="1" aria-label="時刻を選ぶ">
+        <button class="radar__now" id="radarNow" type="button">いま</button>
       </div>
 
       <div class="radar__legend" id="radarLegend"></div>
       <p class="chart-hint">
-        中心の印があなたの場所です。▶を押すと、過去30分から この先60分までの雨雲の動きが見られます。<br>
+        中心の印があなたの場所です。<strong>5分きざみ</strong>で、過去3時間から この先60分まで見られます。<br>
+        60分より先の雨は、上の「これから12時間」のグラフでご確認ください。<br>
         雨雲：気象庁 高解像度降水ナウキャスト／地図：国土地理院
       </p>
     </section>
