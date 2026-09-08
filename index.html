@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="auto">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>おでかけ天気</title>
+<meta name="description" content="出かける前の12時間の雨と気温がひと目でわかる天気アプリ">
+<meta name="theme-color" content="#5aa9e6" id="meta-theme-color">
+<meta name="color-scheme" content="light dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="おでかけ天気">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<!-- 背景（天気と時間帯で色が変わる空） -->
+<div class="sky" id="sky" aria-hidden="true">
+  <div class="sky__sun" id="skySun"></div>
+  <div class="sky__cloud sky__cloud--a"></div>
+  <div class="sky__cloud sky__cloud--b"></div>
+  <div class="sky__cloud sky__cloud--c"></div>
+</div>
+<canvas class="rain-canvas" id="rainCanvas" aria-hidden="true"></canvas>
+
+<!-- ================= メイン画面 ================= -->
+<div class="app" id="app" hidden>
+
+  <header class="header">
+    <div class="header__bar">
+      <nav class="tabs" id="placeTabs" aria-label="登録した地点">
+        <!-- 地点タブが入る -->
+      </nav>
+      <button class="icon-btn header__gear" id="btnSettings" type="button" aria-label="設定を開く">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+          <path fill="currentColor" d="M12 15.5A3.5 3.5 0 1 1 15.5 12 3.5 3.5 0 0 1 12 15.5m7.43-2.53a7.7 7.7 0 0 0 0-1.94l2.03-1.58a.5.5 0 0 0 .12-.62l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.3 7.3 0 0 0-1.68-.97l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.6.24-1.16.57-1.68.97l-2.39-.96a.5.5 0 0 0-.6.22L2.42 8.83a.5.5 0 0 0 .12.62l2.03 1.58a7.7 7.7 0 0 0 0 1.94l-2.03 1.58a.5.5 0 0 0-.12.62l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.52.4 1.08.73 1.68.97l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.6-.24 1.16-.57 1.68-.97l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.62Z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="main" id="main">
+
+    <!-- 引っ張って更新のインジケータ -->
+    <div class="pull-indicator" id="pullIndicator" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="22" height="22" class="pull-indicator__icon" id="pullIcon">
+        <path fill="currentColor" d="M12 5v9m0 0 4-4m-4 4-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill-opacity="0"/>
+      </svg>
+      <span class="pull-indicator__text" id="pullText">引っ張って更新</span>
+    </div>
+
+    <!-- 雨アラート -->
+    <section class="alert" id="rainAlert" hidden aria-live="polite">
+      <div class="alert__icon" id="rainAlertIcon"></div>
+      <div class="alert__body">
+        <p class="alert__title" id="rainAlertTitle"></p>
+        <p class="alert__sub" id="rainAlertSub"></p>
+      </div>
+    </section>
+
+    <!-- 現在の天気（コンパクト） -->
+    <section class="now" id="nowSection" aria-label="現在の天気">
+      <div class="now__icon" id="nowIcon"></div>
+      <div class="now__temp"><span id="nowTemp">--</span><span class="now__unit">℃</span></div>
+      <div class="now__meta">
+        <span class="now__desc" id="nowDesc">読み込み中</span>
+        <span class="now__feels" id="nowFeels"></span>
+      </div>
+    </section>
+
+    <!-- メイン：これから12時間 -->
+    <section class="card card--chart" aria-label="これから12時間の予報">
+      <div class="card__head">
+        <h2 class="card__title">これから12時間</h2>
+        <div class="metric-tabs" id="metricTabs" role="tablist" aria-label="表示する項目">
+          <button class="metric-tab is-active" type="button" role="tab" data-metric="rain" aria-selected="true">雨</button>
+          <button class="metric-tab" type="button" role="tab" data-metric="feels" aria-selected="false">体感</button>
+          <button class="metric-tab" type="button" role="tab" data-metric="wind" aria-selected="false">風</button>
+          <button class="metric-tab" type="button" role="tab" data-metric="humidity" aria-selected="false">湿度</button>
+        </div>
+      </div>
+      <div class="chart-wrap" id="mainChart"></div>
+      <p class="chart-hint" id="chartHint">グラフの時間をタップすると詳しく見られます</p>
+    </section>
+
+    <!-- 結論カード -->
+    <section class="advice" id="adviceSection" aria-label="おでかけのアドバイス">
+      <article class="advice-card" id="umbrellaCard">
+        <div class="advice-card__icon" id="umbrellaIcon"></div>
+        <div class="advice-card__body">
+          <p class="advice-card__label">傘</p>
+          <p class="advice-card__title" id="umbrellaTitle">--</p>
+          <p class="advice-card__note" id="umbrellaNote"></p>
+        </div>
+      </article>
+      <article class="advice-card" id="clothingCard">
+        <div class="advice-card__icon" id="clothingIcon"></div>
+        <div class="advice-card__body">
+          <p class="advice-card__label">服装</p>
+          <p class="advice-card__title" id="clothingTitle">--</p>
+          <p class="advice-card__note" id="clothingNote"></p>
+        </div>
+      </article>
+    </section>
+
+    <!-- 明日の時間別 -->
+    <section class="card" aria-label="明日の時間別予報">
+      <div class="card__head">
+        <h2 class="card__title">明日<span class="card__title-sub" id="tomorrowDate"></span></h2>
+        <span class="card__badge" id="tomorrowSummary"></span>
+      </div>
+      <div class="chart-wrap" id="tomorrowChart"></div>
+    </section>
+
+    <!-- 5日間予報 -->
+    <section class="card" aria-label="5日間の予報">
+      <div class="card__head">
+        <h2 class="card__title">5日間の予報</h2>
+      </div>
+      <div class="daily" id="dailyList"></div>
+    </section>
+
+    <footer class="meta">
+      <p class="meta__updated" id="updatedAt"></p>
+      <p class="meta__source">予報データ：Open-Meteo（日本国内は気象庁モデルを自動採用）</p>
+      <button class="link-btn" id="btnReload" type="button">最新に更新する</button>
+    </footer>
+  </main>
+</div>
+
+<!-- ================= 初回オンボーディング ================= -->
+<div class="screen screen--onboarding" id="onboarding" hidden>
+  <div class="onboarding__inner">
+    <div class="onboarding__logo" id="onboardingLogo"></div>
+    <h1 class="onboarding__title">おでかけ天気</h1>
+    <p class="onboarding__lead">出かける前の12時間の雨と気温が<br>ひと目でわかります。</p>
+
+    <div class="onboarding__status" id="onboardingStatus">
+      <span class="spinner" id="onboardingSpinner"></span>
+      <span id="onboardingStatusText">現在地を調べています…</span>
+    </div>
+
+    <div class="onboarding__actions" id="onboardingActions" hidden>
+      <button class="btn btn--primary btn--lg" id="btnUseGps" type="button">現在地から始める</button>
+      <button class="btn btn--ghost btn--lg" id="btnSearchInstead" type="button">地名で探す</button>
+    </div>
+    <p class="onboarding__note" id="onboardingNote"></p>
+  </div>
+</div>
+
+<!-- ================= 地点追加画面 ================= -->
+<div class="screen" id="addPlaceScreen" hidden>
+  <div class="screen__head">
+    <button class="icon-btn" id="btnCloseAdd" type="button" aria-label="閉じる">
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>
+    </button>
+    <h2 class="screen__title">場所を追加</h2>
+    <span class="screen__spacer"></span>
+  </div>
+
+  <div class="screen__body">
+    <div class="search">
+      <svg class="search__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14Zm9 16-4.2-4.2" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+      <input class="search__input" id="searchInput" type="search" inputmode="search" enterkeyhint="search"
+             placeholder="地名を入力（例：渋谷区神南）" autocomplete="off" aria-label="地名を入力">
+      <button class="search__clear" id="searchClear" type="button" aria-label="入力を消す" hidden>
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
+      </button>
+    </div>
+
+    <button class="gps-btn" id="btnAddFromGps" type="button">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 2v3m0 14v3M2 12h3m14 0h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/></svg>
+      いまいる場所を追加する
+    </button>
+
+    <p class="search__hint" id="searchHint">町名・丁目まで入力すると、より正確な予報になります。</p>
+    <ul class="results" id="searchResults"></ul>
+  </div>
+</div>
+
+<!-- ================= 名前をつける画面 ================= -->
+<div class="screen screen--sheet" id="namePlaceScreen" hidden>
+  <div class="sheet">
+    <h2 class="sheet__title">この場所に名前をつける</h2>
+    <p class="sheet__address" id="nameAddress"></p>
+    <label class="field">
+      <span class="field__label">名前（タブに表示されます）</span>
+      <input class="field__input" id="nameInput" type="text" maxlength="12" placeholder="例：自宅" autocomplete="off">
+    </label>
+    <div class="chips" id="nameChips">
+      <button class="chip" type="button" data-name="自宅">自宅</button>
+      <button class="chip" type="button" data-name="職場">職場</button>
+      <button class="chip" type="button" data-name="学校">学校</button>
+      <button class="chip" type="button" data-name="実家">実家</button>
+    </div>
+    <div class="sheet__actions">
+      <button class="btn btn--ghost" id="btnCancelName" type="button">やめる</button>
+      <button class="btn btn--primary" id="btnSaveName" type="button">保存する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 設定画面 ================= -->
+<div class="screen" id="settingsScreen" hidden>
+  <div class="screen__head">
+    <button class="icon-btn" id="btnCloseSettings" type="button" aria-label="閉じる">
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>
+    </button>
+    <h2 class="screen__title">設定</h2>
+    <span class="screen__spacer"></span>
+  </div>
+
+  <div class="screen__body">
+
+    <section class="setting-group">
+      <h3 class="setting-group__title">場所</h3>
+      <ul class="place-list" id="placeList"></ul>
+      <button class="btn btn--outline btn--block" id="btnAddPlace" type="button">＋ 場所を追加する</button>
+    </section>
+
+    <section class="setting-group">
+      <h3 class="setting-group__title">暑がり・寒がり</h3>
+      <p class="setting-group__desc">服装のアドバイスの基準がずれます。</p>
+      <div class="segmented" id="tempPref" role="radiogroup" aria-label="暑がり・寒がり">
+        <button class="segmented__item" type="button" role="radio" data-value="cold" aria-checked="false">寒がり</button>
+        <button class="segmented__item" type="button" role="radio" data-value="normal" aria-checked="true">普通</button>
+        <button class="segmented__item" type="button" role="radio" data-value="hot" aria-checked="false">暑がり</button>
+      </div>
+    </section>
+
+    <section class="setting-group">
+      <h3 class="setting-group__title">出かける時間帯</h3>
+      <p class="setting-group__desc">この時間帯をグラフで強調し、傘と服装の判断もこの時間だけを見て行います。</p>
+
+      <div class="schedule-row">
+        <label class="switch">
+          <input type="checkbox" id="weekdayEnabled" checked>
+          <span class="switch__track"><span class="switch__thumb"></span></span>
+          <span class="switch__label">平日（月〜金）</span>
+        </label>
+        <div class="time-range" id="weekdayRange">
+          <select class="time-select" id="weekdayStart" aria-label="平日の出発時刻"></select>
+          <span class="time-range__sep">〜</span>
+          <select class="time-select" id="weekdayEnd" aria-label="平日の帰宅時刻"></select>
+        </div>
+      </div>
+
+      <div class="schedule-row">
+        <label class="switch">
+          <input type="checkbox" id="holidayEnabled">
+          <span class="switch__track"><span class="switch__thumb"></span></span>
+          <span class="switch__label">休日（土日）</span>
+        </label>
+        <div class="time-range" id="holidayRange">
+          <select class="time-select" id="holidayStart" aria-label="休日の出発時刻"></select>
+          <span class="time-range__sep">〜</span>
+          <select class="time-select" id="holidayEnd" aria-label="休日の帰宅時刻"></select>
+        </div>
+      </div>
+    </section>
+
+    <section class="setting-group">
+      <h3 class="setting-group__title">見た目</h3>
+      <div class="setting-row">
+        <span class="setting-row__label">テーマ</span>
+        <div class="segmented segmented--sm" id="themePref" role="radiogroup" aria-label="テーマ">
+          <button class="segmented__item" type="button" role="radio" data-value="auto" aria-checked="true">自動</button>
+          <button class="segmented__item" type="button" role="radio" data-value="light" aria-checked="false">ライト</button>
+          <button class="segmented__item" type="button" role="radio" data-value="dark" aria-checked="false">ダーク</button>
+        </div>
+      </div>
+      <label class="switch switch--row">
+        <input type="checkbox" id="rainAnimEnabled" checked>
+        <span class="switch__track"><span class="switch__thumb"></span></span>
+        <span class="switch__label">雨のときに雨粒を降らせる</span>
+      </label>
+    </section>
+
+    <section class="setting-group">
+      <h3 class="setting-group__title">このアプリについて</h3>
+      <p class="about">
+        予報は <strong>Open-Meteo</strong> から取得しています（日本国内では気象庁の予報モデルが自動で選ばれます）。<br>
+        場所の検索には<strong>国土地理院</strong>の住所検索を使っています。<br>
+        登録した場所と設定は、この端末の中だけに保存されます。
+      </p>
+      <p class="about about--version">バージョン <span id="appVersion">1.0.0</span></p>
+    </section>
+
+  </div>
+</div>
+
+<!-- ================= 時刻の詳細（ボトムシート） ================= -->
+<div class="sheet-overlay" id="hourSheet" hidden>
+  <div class="hour-sheet" role="dialog" aria-label="時刻の詳細">
+    <div class="hour-sheet__grip"></div>
+    <div class="hour-sheet__head">
+      <div class="hour-sheet__icon" id="hourIcon"></div>
+      <div>
+        <p class="hour-sheet__time" id="hourTime">--</p>
+        <p class="hour-sheet__desc" id="hourDesc">--</p>
+      </div>
+      <div class="hour-sheet__temp"><span id="hourTemp">--</span>℃</div>
+    </div>
+    <dl class="hour-detail" id="hourDetail"></dl>
+    <button class="btn btn--ghost btn--block" id="btnCloseHour" type="button">閉じる</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="./icons.js"></script>
+<script src="./store.js"></script>
+<script src="./muni.js"></script>
+<script src="./geocode.js"></script>
+<script src="./weather.js"></script>
+<script src="./advice.js"></script>
+<script src="./sky.js"></script>
+<script src="./chart.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
