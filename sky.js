@@ -161,6 +161,10 @@
       if (document.hidden) stop();
       else if (Rain.mode !== 'off') start();
     });
+    // スマホでは、他のアプリから戻ってきたときにこちらで復帰することがある。
+    // visibilitychange だけに頼ると、雨が止まったままになる端末がある。
+    global.addEventListener('pageshow', () => { if (Rain.mode !== 'off') start(); });
+    global.addEventListener('focus', () => { if (Rain.mode !== 'off') start(); });
     return true;
   }
 
@@ -274,24 +278,44 @@
    */
   function setPrecip(mode, intensity) {
     if (!ensureCanvas()) return;
-    if (reduceMotion()) mode = 'off';
     Rain.intensity = Math.max(0, Math.min(1, intensity || 0));
-    if (mode === Rain.mode) {
-      // 強さだけ変わった場合は粒の数を調整
-      if (mode !== 'off' && Rain.drops.length !== dropCount()) seed();
+
+    if (mode === 'off') {
+      if (Rain.mode !== 'off') { stop(); Rain.drops = []; }
+      Rain.mode = 'off';
+      Rain.canvas.style.opacity = '0';
       return;
     }
+
+    const changed = mode !== Rain.mode;
     Rain.mode = mode;
-    if (mode === 'off') { stop(); Rain.drops = []; Rain.canvas.style.opacity = '0'; return; }
     Rain.canvas.style.opacity = '';
-    seed();
+    if (changed || !Rain.drops.length || Rain.drops.length !== dropCount()) seed();
+
+    // 天気が同じでも、止まっていたら必ず動かし直す。
+    // 以前はここで早期 return していたため、いったん止まると
+    // ずっと雨が降らないままになっていた（スマホで起きやすい）。
     start();
+  }
+
+  /** いま雨が降っていない理由を調べるための情報 */
+  function rainStatus() {
+    return {
+      mode: Rain.mode,
+      running: Rain.running,
+      drops: Rain.drops.length,
+      size: Rain.canvas ? (Rain.w + 'x' + Rain.h) : null,
+      reduceMotion: reduceMotion(),
+      documentHidden: document.hidden
+    };
   }
 
   global.Sky = {
     apply,
     setPrecip,
     stopPrecip: stop,
+    rainStatus,
+    reduceMotion,
     category: skyCategory,
     phase: timePhase,
     get currentKey() { return currentKey; }

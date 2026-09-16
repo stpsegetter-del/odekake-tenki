@@ -200,6 +200,11 @@
       return normalizeSettings(readJson(K_SETTINGS, {}));
     },
 
+    /** 一度でも設定を保存したことがあるか（初回起動の判定に使う） */
+    hasSettings() {
+      return readRaw(K_SETTINGS) != null;
+    },
+
     saveSettings(patch) {
       const next = normalizeSettings(Object.assign({}, Store.getSettings(), patch));
       writeJson(K_SETTINGS, next);

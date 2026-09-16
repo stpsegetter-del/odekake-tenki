@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.1.0';
+  const VERSION = '1.1.1';
   const $ = (id) => document.getElementById(id);
 
   /* ---------------- 状態 ---------------- */
@@ -22,7 +22,13 @@
      起動
      ===================================================================== */
   function boot() {
+    const firstRun = !Store.hasSettings();
     settings = Store.getSettings();
+    // 初回だけ、端末の「視差効果を減らす」に合わせて雨の演出を切っておく。
+    // 2回目以降は、設定画面でのご指定を優先します。
+    if (firstRun && window.Sky && Sky.reduceMotion && Sky.reduceMotion()) {
+      settings = Store.saveSettings({ rainAnim: false });
+    }
     places = Store.getPlaces();
     metric = 'rain';
 
@@ -485,7 +491,43 @@
   function openSettings() {
     renderPlaceList();
     syncSettingsUi();
+    updateRainStatus();
     $('settingsScreen').hidden = false;
+  }
+
+  /**
+   * 雨の演出が出ない理由を、その場で分かるようにする。
+   * 「PCでは出るのにスマホでは出ない」ときの原因切り分け用。
+   */
+  function updateRainStatus() {
+    const el = $('rainAnimStatus');
+    if (!el) return;
+
+    if (!settings.rainAnim) {
+      el.textContent = 'いまは「切」なので降りません。';
+      return;
+    }
+
+    const s = (window.Sky && Sky.rainStatus) ? Sky.rainStatus() : null;
+    const cur = currentData
+      ? (currentData.current || currentData.hourly[Weather.nowIndex(currentData)])
+      : null;
+    const wet = cur ? WeatherIcons.isWet(cur.code) : false;
+
+    const parts = [];
+    if (!cur) {
+      parts.push('天気を読み込み中です。');
+    } else if (!wet) {
+      parts.push(`いまは${WeatherIcons.label(cur.code)}なので降りません（雨や雪のときだけ降ります）。`);
+    } else if (s && s.running) {
+      parts.push(`動いています（雨粒 ${s.drops}つぶ・画面 ${s.size}）。`);
+    } else {
+      parts.push('雨ですが、いま止まっています。画面に戻ると動き出します。');
+    }
+    if (s && s.reduceMotion) {
+      parts.push('端末側の「視差効果を減らす」が有効です（このアプリではこの設定を優先します）。');
+    }
+    el.textContent = parts.join(' ');
   }
 
   function closeSettings() {
@@ -861,6 +903,7 @@
     $('rainAnimEnabled').addEventListener('change', (e) => {
       settings = Store.saveSettings({ rainAnim: e.target.checked });
       if (currentData) applySky(currentData);
+      setTimeout(updateRainStatus, 120);
     });
 
     // 出かける時間帯
