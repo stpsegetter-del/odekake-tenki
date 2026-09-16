@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>おでかけ天気</title>
-<meta name="description" content="出かける前の12時間の雨と気温がひと目でわかる天気アプリ">
+<meta name="description" content="出かける前の24時間の雨と気温がひと目でわかる天気アプリ">
 <meta name="theme-color" content="#5aa9e6" id="meta-theme-color">
 <meta name="color-scheme" content="light dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -72,10 +72,10 @@
       </div>
     </section>
 
-    <!-- メイン：これから12時間 -->
-    <section class="card card--chart" aria-label="これから12時間の予報">
+    <!-- メイン：これから24時間 -->
+    <section class="card card--chart" aria-label="これから24時間の予報">
       <div class="card__head">
-        <h2 class="card__title">これから12時間</h2>
+        <h2 class="card__title">これから24時間</h2>
         <div class="metric-tabs" id="metricTabs" role="tablist" aria-label="表示する項目">
           <button class="metric-tab is-active" type="button" role="tab" data-metric="rain" aria-selected="true">雨</button>
           <button class="metric-tab" type="button" role="tab" data-metric="feels" aria-selected="false">体感</button>
@@ -114,10 +114,23 @@
         <span class="card__badge" id="radarTime"></span>
       </div>
 
+      <div class="radar-modes" id="radarModes" role="tablist" aria-label="見る範囲">
+        <button class="radar-mode is-active" type="button" role="tab" data-mode="now" aria-selected="true">
+          <span class="radar-mode__main">いま</span>
+          <span class="radar-mode__sub">5分ごと・1時間先まで</span>
+        </button>
+        <button class="radar-mode" type="button" role="tab" data-mode="day" aria-selected="false">
+          <span class="radar-mode__main">この先24時間</span>
+          <span class="radar-mode__sub">1時間ごと</span>
+        </button>
+      </div>
+
       <div class="radar" id="radarMap">
         <div class="radar__layer radar__layer--base" id="radarBase"></div>
         <div class="radar__layer radar__layer--rain" id="radarFrames"></div>
+        <canvas class="radar__layer radar__heat" id="radarHeat" hidden></canvas>
         <div class="radar__pin" aria-hidden="true"></div>
+        <div class="radar__loading" id="radarLoading" hidden aria-hidden="true"><span class="spinner"></span></div>
         <div class="radar__zoom">
           <button class="radar__zoom-btn" id="radarZoomIn" type="button" aria-label="拡大する">
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
@@ -139,11 +152,7 @@
       </div>
 
       <div class="radar__legend" id="radarLegend"></div>
-      <p class="chart-hint">
-        中心の印があなたの場所です。<strong>5分きざみ</strong>で、過去3時間から この先60分まで見られます。<br>
-        60分より先の雨は、上の「これから12時間」のグラフでご確認ください。<br>
-        雨雲：気象庁 高解像度降水ナウキャスト／地図：国土地理院
-      </p>
+      <p class="chart-hint" id="radarHint"></p>
     </section>
 
     <!-- 明日の時間別 -->
@@ -176,7 +185,7 @@
   <div class="onboarding__inner">
     <div class="onboarding__logo" id="onboardingLogo"></div>
     <h1 class="onboarding__title">おでかけ天気</h1>
-    <p class="onboarding__lead">出かける前の12時間の雨と気温が<br>ひと目でわかります。</p>
+    <p class="onboarding__lead">出かける前の24時間の雨と気温が<br>ひと目でわかります。</p>
 
     <div class="onboarding__status" id="onboardingStatus">
       <span class="spinner" id="onboardingSpinner"></span>

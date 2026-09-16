@@ -568,6 +568,60 @@ body.is-updating .header__gear::after {
 }
 
 /* ---------------- 雨雲レーダー ---------------- */
+
+/* 「いま」/「この先24時間」の切り替え */
+.radar-modes {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 0 0 10px;
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+.radar-mode {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 8px 6px;
+  min-height: 48px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: background .16s, color .16s;
+}
+.radar-mode.is-active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, .13);
+}
+.radar-mode__main { font-size: .95rem; font-weight: 700; }
+.radar-mode__sub { font-size: .66rem; color: var(--text-weak); }
+.radar-mode.is-active .radar-mode__sub { color: var(--accent); opacity: .8; }
+
+/* 24時間モードの色塗り */
+.radar__heat {
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* 読み込み中 */
+.radar__loading {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, .55);
+  color: var(--accent);
+}
+[data-theme="dark"] .radar__loading { background: rgba(16, 22, 30, .55); }
+
 .radar {
   position: relative;
   width: 100%;

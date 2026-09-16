@@ -1,7 +1,7 @@
 {
   "name": "おでかけ天気",
   "short_name": "おでかけ天気",
-  "description": "出かける前の12時間の雨と気温がひと目でわかる天気アプリ",
+  "description": "出かける前の24時間の雨と気温がひと目でわかる天気アプリ",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

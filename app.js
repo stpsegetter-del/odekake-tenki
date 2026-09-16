@@ -250,13 +250,16 @@
     if (!currentData) return;
     const data = currentData;
 
+    // グラフは24時間ぶん見せるが、傘・服装・警告の判断は「これから12時間」のまま。
+    // 24時間で判断すると、明日の朝の雨で今日の外出に傘を持たせてしまうため。
     const next12 = Weather.nextHours(data, 12);
+    const next24 = Weather.nextHours(data, 24);
     const scoped = Advice.applySchedule(next12, settings.schedule);
 
     applySky(data);
     renderNow(data);
     renderAlert(scoped.hours, scoped.applied, next12[0]);
-    renderMainChart(next12);
+    renderMainChart(next24);
     renderAdvice(scoped);
     renderTomorrow(data);
     renderDaily(data);
@@ -315,17 +318,17 @@
   }
 
   /* --- メインの12時間グラフ --- */
-  function renderMainChart(next12) {
+  function renderMainChart(hours) {
     Chart.render($('mainChart'), {
-      hours: next12,
+      hours,
       metric,
       schedule: settings.schedule,
       markNow: true,
-      ariaLabel: 'これから12時間の予報',
+      ariaLabel: 'これから24時間の予報',
       onSelect: openHourSheet
     });
 
-    const anyBand = next12.some((h) => Advice.inSchedule(h, settings.schedule));
+    const anyBand = hours.some((h) => Advice.inSchedule(h, settings.schedule));
     const unitNote = metric === 'wind' ? '棒は風の強さ（m/s）、折れ線は気温（℃）。'
       : metric === 'humidity' ? '棒は湿度（％）、折れ線は気温（℃）。'
       : metric === 'feels' ? '棒は降水確率（％）、実線が気温・点線が体感温度（℃）。'
@@ -333,7 +336,7 @@
     $('chartHint').textContent =
       unitNote +
       (anyBand ? 'うすい帯は出かける時間帯です。' : '') +
-      'タップすると詳しく見られます。';
+      '棒は1時間ごと、数字は2時間おきに出しています。タップすると詳しく見られます。';
   }
 
   /* --- 傘と服装 --- */
@@ -779,7 +782,7 @@
         b.setAttribute('aria-selected', on ? 'true' : 'false');
       });
       if (currentData) {
-        renderMainChart(Weather.nextHours(currentData, 12));
+        renderMainChart(Weather.nextHours(currentData, 24));
         renderTomorrow(currentData);
       }
     });

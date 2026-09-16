@@ -109,6 +109,11 @@
     const colW = VB_W / n;
     const m = METRICS[o.metric] || METRICS.rain;
 
+    /* 列が多いときは、棒はぜんぶ出しつつ、アイコンと数字だけ間引く。
+       24時間ぶんを画面幅に収めても読めるようにするため。 */
+    const thin = n > 14 ? 2 : 1;
+    const showLabel = (i) => thin === 1 || i % thin === 0;
+
     /* --- 棒のスケール --- */
     let barMax = m.max;
     if (barMax == null) {
@@ -191,7 +196,8 @@
       const h = hours[i];
       if (h.temp == null) continue;
       const y = tY(h.temp);
-      svg += `<circle class="ch-dot" cx="${r2(cx(i))}" cy="${r2(y)}" r="2.4"/>`;
+      svg += `<circle class="ch-dot" cx="${r2(cx(i))}" cy="${r2(y)}" r="${thin > 1 ? 1.8 : 2.4}"/>`;
+      if (!showLabel(i)) continue;
       svg += `<text class="ch-temp-label" x="${r2(cx(i))}" y="${r2(Math.max(L.tempLabelBase, y - 7))}">${Math.round(h.temp)}</text>`;
     }
     if (o.metric === 'feels') {
@@ -204,8 +210,9 @@
 
     /* --- 天気アイコン --- */
     for (let i = 0; i < n; i++) {
+      if (!showLabel(i)) continue;
       const h = hours[i];
-      const s = Math.min(L.iconSize, colW * 0.86);
+      const s = Math.min(L.iconSize, colW * thin * 0.86);
       const x = cx(i) - s / 2;
       svg += `<g transform="translate(${r2(x)} ${L.iconTop}) scale(${r2(s / 64)})" class="ch-icon">` +
              global.WeatherIcons.svg(h.code, h.isDay, { size: 64, cls: '' })
@@ -215,6 +222,7 @@
 
     /* --- 棒の数値 --- */
     for (let i = 0; i < n; i++) {
+      if (!showLabel(i)) continue;
       const v = hours[i][m.key];
       if (v == null) continue;
       const txt = m.key === 'wind' ? String(Math.round(v * 10) / 10) : String(Math.round(v));
@@ -225,9 +233,9 @@
 
     /* --- 時刻 --- */
     for (let i = 0; i < n; i++) {
-      const h = hours[i];
       const isNow = o.markNow && i === 0;
-      const label = isNow ? '今' : String(h.hour);
+      if (!isNow && !showLabel(i)) continue;
+      const label = isNow ? '今' : String(hours[i].hour);
       svg += `<text class="ch-hour${isNow ? ' is-now' : ''}" x="${r2(cx(i))}" y="${L.hourLabelBase}">${esc(label)}</text>`;
     }
 
