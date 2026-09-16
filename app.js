@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.0.0';
+  const VERSION = '1.1.0';
   const $ = (id) => document.getElementById(id);
 
   /* ---------------- 状態 ---------------- */
@@ -799,6 +799,7 @@
       handlePlaceOp(li.getAttribute('data-id'), b.getAttribute('data-op'));
     });
 
+    $('btnCheckUpdate').addEventListener('click', checkForUpdate);
     $('btnAddPlace').addEventListener('click', openAddPlace);
     $('btnCloseAdd').addEventListener('click', closeAddPlace);
     $('btnAddFromGps').addEventListener('click', addFromGps);
@@ -949,12 +950,64 @@
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  /* ---------------- 更新まわり ----------------
+     アプリを直したのに端末が古い画面を出し続ける、という事故を防ぐ仕組み。
+     ・sw.js 自体をブラウザのキャッシュから読ませない（updateViaCache: 'none'）
+     ・新しい版が使える状態になったら、その場で1度だけ読み込み直す
+     ・画面に戻ってくるたびに更新を確認する
+  */
+  let swRegistration = null;
+  let reloadingForUpdate = false;
+
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
     if (location.protocol === 'file:') return;
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').catch(() => { /* 失敗しても動きます */ });
+
+    const hadController = !!navigator.serviceWorker.controller;
+
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      // 初回インストール時は読み込み直さない（まだ古い画面ではないため）
+      if (!hadController || reloadingForUpdate) return;
+      reloadingForUpdate = true;
+      location.reload();
     });
+
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+        .then((reg) => {
+          swRegistration = reg;
+          reg.update().catch(() => {});
+          document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) reg.update().catch(() => {});
+          });
+        })
+        .catch(() => { /* 失敗してもアプリは動きます */ });
+    });
+  }
+
+  /** 設定画面の「最新版を確認する」ボタン */
+  function checkForUpdate() {
+    const btn = $('btnCheckUpdate');
+    if (!('serviceWorker' in navigator) || !swRegistration) {
+      toast('この環境では更新の確認ができません');
+      return;
+    }
+    if (btn) { btn.disabled = true; btn.textContent = '確認しています…'; }
+    swRegistration.update()
+      .then(() => new Promise((r) => setTimeout(r, 1200)))
+      .then(() => {
+        if (swRegistration.waiting) {
+          swRegistration.waiting.postMessage('skipWaiting');
+          toast('新しい版に切り替えます…');
+          setTimeout(() => { reloadingForUpdate = true; location.reload(); }, 600);
+        } else {
+          toast('すでに最新版です');
+        }
+      })
+      .catch(() => toast('確認できませんでした'))
+      .finally(() => {
+        if (btn) { btn.disabled = false; btn.textContent = '最新版を確認する'; }
+      });
   }
 
   /* ---------------- 起動 ---------------- */
