@@ -1332,6 +1332,21 @@ body.is-updating .header__gear::after {
   color: var(--text-sub);
   line-height: 1.85;
 }
+
+.diagnose {
+  margin: 12px 0 0;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: .8rem;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.meta__source.is-fallback { color: #ffd98a; font-weight: 600; }
 .about--version { margin-top: 8px; color: var(--text-weak); }
 
 /* ---------------- 時刻の詳細シート ---------------- */

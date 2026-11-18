@@ -25,10 +25,12 @@
   };
 
   const METRICS = {
-    rain:     { key: 'pop',      unit: '%',    max: 100, color: 'var(--ch-rain,#3d8fd6)',  name: '降水確率' },
-    humidity: { key: 'humidity', unit: '%',    max: 100, color: 'var(--ch-humid,#4bb3a5)', name: '湿度' },
-    wind:     { key: 'wind',     unit: 'm/s',  max: null, color: 'var(--ch-wind,#7f8fa6)', name: '風速' },
-    feels:    { key: 'pop',      unit: '%',    max: 100, color: 'var(--ch-rain,#3d8fd6)',  name: '降水確率', faded: true }
+    rain:     { key: 'pop',      unit: '%',   max: 100,  color: 'var(--ch-rain,#3d8fd6)',  name: '降水確率' },
+    humidity: { key: 'humidity', unit: '%',   max: 100,  color: 'var(--ch-humid,#4bb3a5)', name: '湿度' },
+    wind:     { key: 'wind',     unit: 'm/s', max: null, color: 'var(--ch-wind,#7f8fa6)',  name: '風速', minMax: 6, step: 2, decimals: 1 },
+    feels:    { key: 'pop',      unit: '%',   max: 100,  color: 'var(--ch-rain,#3d8fd6)',  name: '降水確率', faded: true },
+    // 配信元が降水確率を出さないとき（met.no）に使う代わりの指標
+    precip:   { key: 'precip',   unit: 'mm',  max: null, color: 'var(--ch-rain,#3d8fd6)',  name: '降水量', minMax: 2, step: 0.5, decimals: 1 }
   };
 
   function esc(s) {
@@ -107,7 +109,13 @@
 
     const n = hours.length;
     const colW = VB_W / n;
-    const m = METRICS[o.metric] || METRICS.rain;
+    let m = METRICS[o.metric] || METRICS.rain;
+
+    // 降水確率がまったく無いデータ（met.no など）のときは、
+    // 空の棒を並べても意味がないので降水量に差し替える。
+    if (m.key === 'pop' && !hours.some((h) => h.pop != null)) {
+      m = Object.assign({}, METRICS.precip, { faded: m.faded });
+    }
 
     /* 列が多いときは、棒はぜんぶ出しつつ、アイコンと数字だけ間引く。
        24時間ぶんを画面幅に収めても読めるようにするため。 */
@@ -119,7 +127,8 @@
     if (barMax == null) {
       let mx = 0;
       for (const h of hours) if (h[m.key] != null) mx = Math.max(mx, h[m.key]);
-      barMax = Math.max(6, Math.ceil(mx / 2) * 2);
+      const step = m.step || 2;
+      barMax = Math.max(m.minMax || 6, Math.ceil(mx / step) * step);
     }
 
     /* --- 気温のスケール --- */
@@ -225,7 +234,9 @@
       if (!showLabel(i)) continue;
       const v = hours[i][m.key];
       if (v == null) continue;
-      const txt = m.key === 'wind' ? String(Math.round(v * 10) / 10) : String(Math.round(v));
+      const txt = m.decimals
+        ? String(Math.round(v * 10) / 10)
+        : String(Math.round(v));
       const zero = Math.round(v) === 0;
       const style = zero ? '' : ` style="fill:${m.color}"`;
       svg += `<text class="ch-bar-label${zero ? ' is-zero' : ''}" x="${r2(cx(i))}" y="${L.barLabelBase}"${style}>${esc(txt)}</text>`;

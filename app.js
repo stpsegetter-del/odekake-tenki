@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.1.1';
+  const VERSION = '1.2.0';
   const $ = (id) => document.getElementById(id);
 
   /* ---------------- 状態 ---------------- */
@@ -335,10 +335,12 @@
     });
 
     const anyBand = hours.some((h) => Advice.inSchedule(h, settings.schedule));
+    // 配信元によっては降水確率が無いので、そのときは降水量で表示している
+    const rainWord = hours.some((h) => h.pop != null) ? '棒は降水確率（％）' : '棒は降水量（mm）';
     const unitNote = metric === 'wind' ? '棒は風の強さ（m/s）、折れ線は気温（℃）。'
       : metric === 'humidity' ? '棒は湿度（％）、折れ線は気温（℃）。'
-      : metric === 'feels' ? '棒は降水確率（％）、実線が気温・点線が体感温度（℃）。'
-      : '棒は降水確率（％）、折れ線は気温（℃）。';
+      : metric === 'feels' ? rainWord + '、実線が気温・点線が体感温度（℃）。'
+      : rainWord + '、折れ線は気温（℃）。';
     $('chartHint').textContent =
       unitNote +
       (anyBand ? 'うすい帯は出かける時間帯です。' : '') +
@@ -453,6 +455,46 @@
     if (currentMeta.error) s += '（最新に更新できませんでした）';
     el.textContent = s;
     el.classList.toggle('is-stale', age > Weather.FRESH_MS * 3 || !!currentMeta.error);
+
+    // どの配信元のデータを見ているかを出す（切り替わったことが分かるように）
+    const src = $('dataSource');
+    if (src && currentData) {
+      const info = Weather.SOURCES[currentData.source];
+      if (currentData.source === 'met-no') {
+        src.textContent = '予報データ：' + (info ? info.label : currentData.source) +
+          '　※主の配信元が応答しないため切り替えています。降水確率は提供されないので降水量で表示しています。';
+        src.classList.add('is-fallback');
+      } else {
+        src.textContent = '予報データ：Open-Meteo（日本国内は気象庁モデルを自動採用）';
+        src.classList.remove('is-fallback');
+      }
+    }
+  }
+
+  /* ---------------- 通信テスト ---------------- */
+  function runDiagnose() {
+    const btn = $('btnDiagnose');
+    const out = $('diagnoseResult');
+    btn.disabled = true;
+    btn.textContent = '調べています…';
+    out.hidden = false;
+    out.textContent = '調べています…';
+
+    Weather.diagnose()
+      .then((rows) => {
+        const lines = rows.map((r) =>
+          `${r.ok ? '○' : '×'} ${r.name}　${r.ok ? r.ms + 'ms' : '失敗(' + (r.code || '-') + ')'}`);
+        const ng = rows.filter((r) => !r.ok);
+        let verdict;
+        if (!ng.length) verdict = 'すべて正常です。';
+        else if (ng.length === rows.length) verdict = 'どこにもつながりません。通信環境をご確認ください。';
+        else if (ng.length === 1 && ng[0].name === '予報（主）') {
+          verdict = '天気データの配信元だけが応答していません。お使いの端末や回線の問題ではありません。しばらく待つと戻ります（その間は副の配信元に切り替わります）。';
+        } else verdict = ng.map((r) => r.name).join('・') + ' につながりません。';
+        out.textContent = lines.join('\n') + '\n\n' + verdict;
+      })
+      .catch(() => { out.textContent = '調べられませんでした。'; })
+      .finally(() => { btn.disabled = false; btn.textContent = '通信テストをする'; });
   }
 
   /* =====================================================================
@@ -842,6 +884,7 @@
     });
 
     $('btnCheckUpdate').addEventListener('click', checkForUpdate);
+    $('btnDiagnose').addEventListener('click', runDiagnose);
     $('btnAddPlace').addEventListener('click', openAddPlace);
     $('btnCloseAdd').addEventListener('click', closeAddPlace);
     $('btnAddFromGps').addEventListener('click', addFromGps);

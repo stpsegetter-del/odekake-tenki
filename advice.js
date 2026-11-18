@@ -83,14 +83,15 @@
 
   function summarize(hours) {
     const s = {
+      // maxPop は null のことがある（降水確率を出さない配信元に切り替わったとき）
       count: hours.length,
-      maxPop: 0, sumMm: 0, maxMm: 0,
+      maxPop: null, sumMm: 0, maxMm: 0,
       minTemp: null, maxTemp: null,
       minFeels: null, maxFeels: null,
       maxWind: 0, anySnow: false, anyThunder: false
     };
     for (const h of hours) {
-      if (h.pop != null) s.maxPop = Math.max(s.maxPop, h.pop);
+      if (h.pop != null) s.maxPop = s.maxPop == null ? h.pop : Math.max(s.maxPop, h.pop);
       if (h.precip != null) { s.sumMm += h.precip; s.maxMm = Math.max(s.maxMm, h.precip); }
       if (h.temp != null) {
         s.minTemp = s.minTemp == null ? h.temp : Math.min(s.minTemp, h.temp);
@@ -125,25 +126,30 @@
     if (s.sumMm >= 0.5) detail.push(`降水量 合計${s.sumMm}mm`);
     const detailText = detail.length ? `（${detail.join('・')}）` : '';
 
+    // 降水確率が無い配信元のときは、雨量だけで判断する
+    const pop = s.maxPop == null ? -1 : s.maxPop;
+
     let state, title, note;
 
-    if (s.maxPop >= POP_STRONG || s.sumMm >= MM_STRONG) {
+    if (pop >= POP_STRONG || s.sumMm >= MM_STRONG) {
       state = 'strong';
       title = s.anySnow ? '雪です。傘と滑らない靴を' : 'しっかりした傘を持って';
       note = first
         ? `${timeWord(first)}に${wetWord}の予報です${detailText}。`
         : `この先${wetWord}の予報です${detailText}。`;
       if (s.maxMm >= 4) note += '短時間に強く降る時間があります。';
-    } else if (s.maxPop >= POP_UMBRELLA || s.sumMm >= 1.0) {
+    } else if (pop >= POP_UMBRELLA || s.sumMm >= 1.0) {
       state = 'need';
       title = '傘を持って行きましょう';
       note = first
         ? `${timeWord(first)}に${wetWord}が降るかもしれません${detailText}。`
         : `${wetWord}が降るかもしれません${detailText}。`;
-    } else if (s.maxPop >= POP_LIGHT) {
+    } else if (pop >= POP_LIGHT || s.sumMm >= 0.2) {
       state = 'folding';
       title = '折りたたみ傘があると安心';
-      note = `降水確率は最大${Math.round(s.maxPop)}%。念のため、かばんに1本。`;
+      note = s.maxPop != null
+        ? `降水確率は最大${Math.round(s.maxPop)}%。念のため、かばんに1本。`
+        : `わずかに雨の予想があります（${s.sumMm}mm）。念のため、かばんに1本。`;
     } else {
       state = 'no';
       title = '傘はいりません';
@@ -208,7 +214,7 @@
    */
   function alert(hours, nowRef) {
     const s = summarize(hours);
-    if (s.maxPop < POP_ALERT && s.sumMm < MM_ALERT) return null;
+    if ((s.maxPop == null || s.maxPop < POP_ALERT) && s.sumMm < MM_ALERT) return null;
 
     const spans = rainSpans(hours, POP_ALERT, MM_WET);
     const span = spans[0] || rainSpans(hours, POP_UMBRELLA, MM_WET)[0];
@@ -231,7 +237,7 @@
         ? `${span.from.hour}時ごろ`
         : `${span.from.hour}時ごろ〜${last.to.hour}時ごろ`);
     }
-    parts.push(`降水確率 最大${Math.round(s.maxPop)}%`);
+    if (s.maxPop != null) parts.push(`降水確率 最大${Math.round(s.maxPop)}%`);
     if (s.sumMm >= 1) parts.push(`合計${s.sumMm}mm`);
 
     return {

@@ -174,7 +174,7 @@
 
     <footer class="meta">
       <p class="meta__updated" id="updatedAt"></p>
-      <p class="meta__source">予報データ：Open-Meteo（日本国内は気象庁モデルを自動採用）</p>
+      <p class="meta__source" id="dataSource">予報データ：Open-Meteo（日本国内は気象庁モデルを自動採用）</p>
       <button class="link-btn" id="btnReload" type="button">最新に更新する</button>
     </footer>
   </main>
@@ -336,12 +336,21 @@
         場所の検索には<strong>国土地理院</strong>の住所検索を使っています。<br>
         登録した場所と設定は、この端末の中だけに保存されます。
       </p>
-      <p class="about about--version">バージョン <span id="appVersion">1.1.1</span></p>
+      <p class="about about--version">バージョン <span id="appVersion">1.2.0</span></p>
       <button class="btn btn--outline btn--block" id="btnCheckUpdate" type="button">最新版を確認する</button>
       <p class="about">
         アプリを直したのに画面が変わらないときは、ここを押してください。
         新しい版があれば、その場で切り替わります。
       </p>
+    </section>
+
+    <section class="setting-group">
+      <h3 class="setting-group__title">うまく表示されないとき</h3>
+      <p class="setting-group__desc">
+        どこまでつながっているかを調べます。天気が「ーー」のままのときにお使いください。
+      </p>
+      <button class="btn btn--outline btn--block" id="btnDiagnose" type="button">通信テストをする</button>
+      <pre class="diagnose" id="diagnoseResult" hidden></pre>
     </section>
 
   </div>
